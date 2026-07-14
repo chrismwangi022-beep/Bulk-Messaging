@@ -1,0 +1,12 @@
+cp "/mnt/c/Users/ADMIN/Desktop/Christopher/Bulk Messaging/Daily_Arrears_SMS.xlsx" ~/n8n-files/
+
+rm ~/n8n-files/Daily_Arrears_SMS.xlsx
+cp "/mnt/c/Users/ADMIN/Desktop/Christopher/Bulk Messaging/Daily_Arrears_SMS.xlsx" ~/n8n-files/
+
+Your Read File node would always use:
+/home/node/.n8n-files/Daily_Arrears_SMS.xlsx
+and never change.IE MAKE THE SCRIPT OUPUT THE FILE TO : C:\Users\ADMIN\Desktop\Christopher\Bulk Messaging
+
+ollama list
+
+ollama run qwen2.5-coder:7b

@@ -1,0 +1,369 @@
+{
+  "name": "Bulk SMS workflow",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1808,
+        256
+      ],
+      "id": "37ad51c3-2102-4bc8-99a3-f5e9c1522386",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "fileSelector": "/data/christopher/Bulk Messaging/Daily_Arrears_SMS.xlsx",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        -1536,
+        256
+      ],
+      "id": "5e868d79-4fb9-4614-8e12-5d2cc61b2640",
+      "name": "Read/Write Files from Disk",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "xlsx",
+        "options": {
+          "headerRow": true
+        }
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -1312,
+        256
+      ],
+      "id": "3123dd4f-f9ce-4e40-ab38-45e4799b8d5e",
+      "name": "Extract from File",
+      "retryOnFail": true,
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "eebde773-da39-4e28-8cd8-5bd85cbfe040",
+              "leftValue": "={{ $json.phone }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "2c9271df-729c-4c59-b793-6e482d9aaa63",
+              "leftValue": "={{ $json.message }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "a20146f3-39ff-4ee1-9137-6231dc4225e7",
+              "leftValue": "={{ $json.phone }}",
+              "rightValue": "254",
+              "operator": {
+                "type": "string",
+                "operation": "startsWith"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {
+          "ignoreCase": false
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -864,
+        144
+      ],
+      "id": "a0d21d30-f7f4-4af4-a712-77d68d8a120c",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -512,
+        128
+      ],
+      "id": "e4488c13-ad6e-4dbb-91f7-a3dc6e1c7c75",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const name = $json.MemberName;\nconst days = Number($json.Days);\n\n\n// ===============================\n// PHONE CLEANING\n// ===============================\n\nlet phone = String($json.MobileNo || '').trim();\n\nphone = phone.replace(/\\D/g,'');\n\nif(phone.startsWith('0')){\n  phone = '254' + phone.substring(1);\n}\n\n\n\n// ===============================\n// PRODUCT RULE ENGINE\n// ===============================\n\nconst product = String(\n  $json.ProductName ||\n  $json.Product ||\n  $json.LoanProduct ||\n  \"\"\n).trim().toLowerCase();\n\n\n\nconst num = (value) => Number(value || 0);\n\n\n\nconst reducingProducts = [\n  \"jijenge loan\",\n  \"okoa\",\n  \"inua loan\",\n  \"okoa plus\"\n];\n\n\nconst flexProducts = [\n  \"flex lending\"\n];\n\n\n\nlet amount;\nlet balanceType;\n\n\n\n// ===============================\n// REDUCING BALANCE\n// Total + Interest\n// ===============================\n\nif (\n  reducingProducts.some(\n    p => product.includes(p)\n  )\n){\n\namount =\nnum($json.Total) +\nnum($json.Interest);\n\n\nbalanceType = \"outstanding\";\n\n}\n\n\n\n// ===============================\n// FLEX LENDING\n// Installment arrears\n// ===============================\n\nelse if (\n  flexProducts.some(\n    p => product.includes(p)\n  )\n){\n\namount =\nnum($json.Installment);\n\n\nbalanceType = \"installment\";\n\n}\n\n\n\n// ===============================\n// FLAT RATE DEFAULT\n// Total\n// ===============================\n\nelse {\n\namount =\nnum($json.Total);\n\n\nbalanceType = \"outstanding\";\n\n}\n\n\n\n// ===============================\n// MONEY FORMAT\n// KES 0,000.00\n// ===============================\n\nconst formattedAmount =\namount.toLocaleString(\n\"en-KE\",\n{\nminimumFractionDigits:2,\nmaximumFractionDigits:2\n}\n);\n\n\n\n// ===============================\n// SMS MESSAGE\n// ===============================\n\n\nlet message = \"\";\n\n\n\nif(balanceType === \"installment\"){\n\n\nmessage =\n`Spread Capital Limited: Dear ${name}, your loan is ${days} day(s) overdue. The total installment arrears as at today are KES ${formattedAmount}. Kindly make payment via Paybill 4016875 to regularize your account. Thank you.`;\n\n\n\n}\n\nelse {\n\n\nmessage =\n`Spread Capital Limited: Dear ${name}, your loan is ${days} day(s) overdue. The total arrears balance as at today is KES ${formattedAmount}. Kindly make payment via Paybill 4016875 to regularize your account. Thank you.`;\n\n\n\n}\n\n\n\nreturn {\n\nphone,\n\nmessage,\n\nSMSRule: balanceType\n\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1072,
+        256
+      ],
+      "id": "24ef5a87-9cbd-4171-bf65-d0daaf68c3ab",
+      "name": "Customer Data Processor",
+      "retryOnFail": true,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "let phone = $json.phone.toString();\n\nif (phone.startsWith(\"254\")) {\n  phone = \"0\" + phone.substring(3);\n}\n\nreturn {\n  json: {\n    ...$json,\n    phone: phone\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -224,
+        144
+      ],
+      "id": "9ad6dc86-1a26-4754-a9a9-4e96b995db97",
+      "name": "SMS Personalization Engine"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.1.16:3000/send-sms",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "phone",
+              "value": "=phone → {{$json.phone}}"
+            },
+            {
+              "name": "message",
+              "value": "={{$json.message}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        64,
+        144
+      ],
+      "id": "85f96b21-20dc-4ed9-b29c-49671c645cf0",
+      "name": "HTTP Request (SMS Gateway Integration)",
+      "retryOnFail": false,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "amount": 3
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        304,
+        144
+      ],
+      "id": "9481ad45-d184-4442-880d-5a0bf2b52208",
+      "name": "Wait (Throttling & Delivery Control)",
+      "webhookId": "a798c4c7-6971-4a70-b61f-1ad70b7dd6b8"
+    },
+    {
+      "parameters": {
+        "content": "🟦 DATA INGESTION\n\nReads arrears portfolio\nExtracts customer records",
+        "height": 112,
+        "width": 224
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1136,
+        96
+      ],
+      "id": "a16b6760-c328-4b4a-823b-0c24238ca7af",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "🟩 PROCESSING ENGINE\n\nCleans data\nFormats contacts\nGenerates personalized messages",
+        "height": 128,
+        "width": 256,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -304,
+        336
+      ],
+      "id": "75c048ed-c8ad-47de-8e92-a28a9895c47e",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "🟨 AUTOMATION CONTROL\n\nBatch processing\nPrevents overload\nTracks flow",
+        "height": 96,
+        "width": 224,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        224,
+        352
+      ],
+      "id": "28c458c3-04ae-45d6-a434-1e328b43cccc",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "content": "🟥 DELIVERY SYSTEM\n\nSends SMS\nHandles communication timing",
+        "height": 128,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "852e432a-af33-42a4-9875-6f312dab2f21",
+      "name": "Sticky Note3"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Read/Write Files from Disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read/Write Files from Disk": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Customer Data Processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "SMS Personalization Engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Customer Data Processor": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SMS Personalization Engine": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request (SMS Gateway Integration)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request (SMS Gateway Integration)": {
+      "main": [
+        [
+          {
+            "node": "Wait (Throttling & Delivery Control)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait (Throttling & Delivery Control)": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "2eea73fb-c23c-4ce0-9208-a3f86053e7c3",
+  "meta": {
+    "instanceId": "1150f57ce790be941a7e5db403df15c37dadcfee36de7aadd29043dae6499782"
+  },
+  "nodeGroups": [],
+  "id": "dJOfUijEjk4ahqng",
+  "tags": []
+}
